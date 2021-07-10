@@ -66,7 +66,23 @@ $someModel->getChangesHistory();
 
 Будет возвращен массив объектов kirillemko\activeRecordHistory\models\ActiveRecordHistory
 
-При приведении объекта к массиву будут два дополнительных свойства type_full_name и field_full_name для удобства подстановки на фронте
+При приведении объекта к массиву будут два дополнительных свойства type_full_name и field_full_name для удобства подстановки на фронте. Пример:
+
+```
+{
+    "id": 10,
+    "user_id": 1,
+    "type": 2,
+    "model": "App\\domain\\ACL\\models\\AclGroupsPermissions",
+    "model_id": "21",
+    "field_name": "desc",
+    "old_value": "Описание объекта",
+    "new_value": "Новое описание объекта",
+    "created_at": 1625908836,
+    "field_full_name": "Описание",
+    "type_full_name": "Редактирование"
+}
+```
 
 В данном объекте в свойстве field_full_name реализовано получение человеческого названия из attributesLabel таргет модели
 
