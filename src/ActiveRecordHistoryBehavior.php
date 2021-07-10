@@ -3,6 +3,7 @@
 namespace kirillemko\activeRecordHistory;
 
 
+use kirillemko\activeRecordHistory\models\ActiveRecordHistory;
 use yii\db\ActiveRecord;
 use \yii\base\Behavior;
 
@@ -21,9 +22,9 @@ class ActiveRecordHistoryBehavior extends Behavior
     public $saveFieldsOnInsert = false;
 
     /**
-     * @var bool If create event should be tracked
+     * @var bool If insert event should be tracked
      */
-    public $watchCreateEvent = true;
+    public $watchInsertEvent = true;
     /**
      * @var bool If update event should be tracked
      */
@@ -33,12 +34,15 @@ class ActiveRecordHistoryBehavior extends Behavior
      */
     public $watchDeleteEvent = true;
 
+    /** @var ActiveRecord|null */
+    private $object = null;
+
 
 
     public function events()
     {
         $events = [];
-        if( $this->watchCreateEvent ){
+        if( $this->watchInsertEvent ){
             $events[ActiveRecord::EVENT_AFTER_INSERT] = 'saveHistory';
         }
         if( $this->watchUpdateEvent ){
@@ -51,58 +55,65 @@ class ActiveRecordHistoryBehavior extends Behavior
         return $events;
     }
 
+
+    public function getChangesHistory()
+    {
+        return ActiveRecordHistory::find()
+            ->andWhere(['model' => get_class($this->owner)])
+            ->andWhere(['model_id' => $this->owner->getPrimaryKey()])
+            ->all();
+    }
+    
+
     /**
      * @param Event $event
      * @throws \Exception
      */
     public function saveHistory($event)
     {
+        $this->object = $event->sender;
+
         switch ($event->name){
             case ActiveRecord::EVENT_AFTER_INSERT:
+                $this->saveHistoryModel(ActiveRecordHistory::TYPE_INSERT);
                 if( $this->saveFieldsOnInsert ){
-                    foreach ($event->changedAttributes as $changedAttribute) {
-                        
-                    }
+                    $this->saveHistoryModelAttributes(ActiveRecordHistory::TYPE_UPDATE, $event->changedAttributes);
                 }
-                
-                $history->type = ActiveRecordHistory::TYPE_INSERT;
-                
-                
-                $type = $manager::AR_INSERT;
-                $manager->setUpdatedFields($event->changedAttributes);
                 break;
-
-            case BaseActiveRecord::EVENT_AFTER_UPDATE:
-
-                if (in_array(BaseManager::AR_UPDATE_PK, $this->eventsList) && ($this->owner->getOldPrimaryKey() != $this->owner->getPrimaryKey()))
-                    $type = $manager::AR_UPDATE_PK;
-                elseif (in_array(BaseManager::AR_UPDATE, $this->eventsList))
-                    $type = $manager::AR_UPDATE;
-                else
-                    return true;
-
-                $changedAttributes = $event->changedAttributes;
-                foreach ($this->ignoreFields as $ignoreField)
-                    if (isset($changedAttributes[$ignoreField]))
-                        unset($changedAttributes[$ignoreField]);
-
-                $manager->setUpdatedFields($changedAttributes);
+            case ActiveRecord::EVENT_AFTER_UPDATE:
+                $this->saveHistoryModelAttributes(ActiveRecordHistory::TYPE_UPDATE, $event->changedAttributes);
                 break;
-
-            case BaseActiveRecord::EVENT_AFTER_DELETE:
-                $type = $manager::AR_DELETE;
+            case ActiveRecord::EVENT_AFTER_DELETE:
+                $this->saveHistoryModel(ActiveRecordHistory::TYPE_DELETE);
                 break;
-
             default:
                 throw new \Exception('Not found event!');
         }
-        $manager->run($type, $this->owner);
     }
 
-    private function saveHistoryModel($type, $attributes = [])
+    private function saveHistoryModelAttributes($type, $changedAttributes = [])
+    {
+        foreach ($changedAttributes as $changedAttributeName => $oldValue) {
+            if( in_array($changedAttributeName, $this->ignoreFields) ){
+                continue;
+            }
+            $newValue = $this->object->$changedAttributeName;
+            $this->saveHistoryModel($type, $changedAttributeName, $oldValue, $newValue);
+        }
+    }
+
+    private function saveHistoryModel($type, $field_name=null, $old_value=null, $new_value=null)
     {
         $history = new ActiveRecordHistory();
         $history->type = $type;
+        $history->field_name = $field_name;
+        $history->old_value = $old_value;
+        $history->new_value = $new_value;
+
+        $history->model = get_class($this->object);
+        $history->model_id = $this->object->getPrimaryKey();
+
+        $history->save();
     }
 
 
