@@ -56,11 +56,12 @@ class ActiveRecordHistoryBehavior extends Behavior
     }
 
 
-    public function getChangesHistory()
+    public function getChangesHistory($sortAsc = true)
     {
         return ActiveRecordHistory::find()
             ->andWhere(['model' => get_class($this->owner)])
             ->andWhere(['model_id' => $this->owner->getPrimaryKey()])
+            ->orderBy(['id' => ($sortAsc ? SORT_ASC : SORT_DESC)])
             ->all();
     }
     

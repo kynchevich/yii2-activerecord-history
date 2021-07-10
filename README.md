@@ -61,7 +61,7 @@ public function behaviors() {
 Также поведение предоставляет метод для получения истории изменений
 
 ```
-$someModel->getChangesHistory();
+$someModel->getChangesHistory($sortAsc = true);
 ```
 
 Будет возвращен массив объектов kirillemko\activeRecordHistory\models\ActiveRecordHistory
