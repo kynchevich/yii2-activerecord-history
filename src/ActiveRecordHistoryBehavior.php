@@ -15,11 +15,20 @@ class ActiveRecordHistoryBehavior extends Behavior
      * @var array This fields will not be trackable
      */
     public $ignoreFields = [];
-    
+
     /**
      * @var bool Save every inserted field on INSERT
      */
     public $saveFieldsOnInsert = false;
+
+    /**
+     * @var bool|string Should I use model property to fill new_value of history on Insert event
+     */
+    public $newValuePropertyOnInsert = false;
+    /**
+     * @var bool|string Should I use model property to fill old_value of history on Delete event
+     */
+    public $oldValuePropertyOnDelete = false;
 
     /**
      * @var bool If insert event should be tracked
@@ -34,21 +43,29 @@ class ActiveRecordHistoryBehavior extends Behavior
      */
     public $watchDeleteEvent = true;
 
+    /**
+     * @var array format property values function to save
+     */
+    public $propertyValueFormatters = [];
+
+
+
+
+
     /** @var ActiveRecord|null */
     private $object = null;
-
 
 
     public function events()
     {
         $events = [];
-        if( $this->watchInsertEvent ){
+        if ($this->watchInsertEvent) {
             $events[ActiveRecord::EVENT_AFTER_INSERT] = 'saveHistory';
         }
-        if( $this->watchUpdateEvent ){
+        if ($this->watchUpdateEvent) {
             $events[ActiveRecord::EVENT_AFTER_UPDATE] = 'saveHistory';
         }
-        if( $this->watchDeleteEvent ){
+        if ($this->watchDeleteEvent) {
             $events[ActiveRecord::EVENT_AFTER_DELETE] = 'saveHistory';
         }
 
@@ -56,15 +73,58 @@ class ActiveRecordHistoryBehavior extends Behavior
     }
 
 
-    public function getChangesHistory($sortAsc = true)
+    public function getChangesHistory($sortAsc = true, $relations = [])
     {
-        return ActiveRecordHistory::find()
-            ->andWhere(['model' => get_class($this->owner)])
-            ->andWhere(['model_id' => $this->owner->getPrimaryKey()])
-            ->orderBy(['id' => ($sortAsc ? SORT_ASC : SORT_DESC)])
-            ->all();
+        $query = ActiveRecordHistory::find()
+            ->orderBy(['id' => ($sortAsc ? SORT_ASC : SORT_DESC)]);
+
+        if (!$relations) {
+            return $query->all();
+        }
+
+
+        $modelWithRelations = get_class($this->owner)::find()
+            ->andWhere($this->owner->getPrimaryKey(true))
+            ->with($relations)
+            ->one();
+
+        // Фильтр только по тем релейшенам, которые запрашивались в истории
+        $relationNames = [];
+        foreach ($relations as $relation) {
+            $relationNames = array_merge($relationNames, explode('.', $relation));
+        }
+
+        $relatedObjectsData = $this->getObjectRelatedRecordData($modelWithRelations, $relationNames);
+        foreach ($relatedObjectsData as $relatedObjectsDatum) {
+            $query->orWhere(['AND', $relatedObjectsDatum]);
+        }
+
+        return $query->all();
     }
-    
+
+    private function getObjectRelatedRecordData(ActiveRecord $object, $filter=[])
+    {
+        $data = [[
+            'model' => get_class($object),
+            'model_id' => $object->getPrimaryKey()
+        ]];
+        foreach ($object->relatedRecords as $relationName => $relatedRecords) {
+            if( $filter && !in_array($relationName, $filter) ){
+                continue;
+            }
+            if( is_array($relatedRecords) ){
+                foreach ($relatedRecords as $relatedRecord) {
+                    $relatedData = $this->getObjectRelatedRecordData($relatedRecord, $filter);
+                    $data = array_merge($data, $relatedData);
+                }
+            } else {
+                $relatedData = $this->getObjectRelatedRecordData($relatedRecords, $filter);
+                $data = array_merge($data, $relatedData);
+            }
+        }
+        return $data;
+    }
+
 
     /**
      * @param Event $event
@@ -74,10 +134,16 @@ class ActiveRecordHistoryBehavior extends Behavior
     {
         $this->object = $event->sender;
 
-        switch ($event->name){
+        switch ($event->name) {
             case ActiveRecord::EVENT_AFTER_INSERT:
-                $this->saveHistoryModel(ActiveRecordHistory::TYPE_INSERT);
-                if( $this->saveFieldsOnInsert ){
+                $this->saveHistoryModel(
+                    ActiveRecordHistory::TYPE_INSERT,
+                    $this->newValuePropertyOnInsert ?: null,
+                    null,
+                    $this->newValuePropertyOnInsert ? $this->object->{$this->newValuePropertyOnInsert} : null
+                );
+
+                if ($this->saveFieldsOnInsert) {
                     $this->saveHistoryModelAttributes(ActiveRecordHistory::TYPE_UPDATE, $event->changedAttributes);
                 }
                 break;
@@ -85,7 +151,13 @@ class ActiveRecordHistoryBehavior extends Behavior
                 $this->saveHistoryModelAttributes(ActiveRecordHistory::TYPE_UPDATE, $event->changedAttributes);
                 break;
             case ActiveRecord::EVENT_AFTER_DELETE:
-                $this->saveHistoryModel(ActiveRecordHistory::TYPE_DELETE);
+//                $this->saveHistoryModel(ActiveRecordHistory::TYPE_DELETE);
+                $this->saveHistoryModel(
+                    ActiveRecordHistory::TYPE_DELETE,
+                    $this->oldValuePropertyOnDelete ?: null,
+                    $this->oldValuePropertyOnDelete ? $this->object->{$this->oldValuePropertyOnDelete} : null,
+                    null
+                );
                 break;
             default:
                 throw new \Exception('Not found event!');
@@ -95,7 +167,7 @@ class ActiveRecordHistoryBehavior extends Behavior
     private function saveHistoryModelAttributes($type, $changedAttributes = [])
     {
         foreach ($changedAttributes as $changedAttributeName => $oldValue) {
-            if( in_array($changedAttributeName, $this->ignoreFields) ){
+            if (in_array($changedAttributeName, $this->ignoreFields)) {
                 continue;
             }
             $newValue = $this->object->$changedAttributeName;
@@ -103,18 +175,26 @@ class ActiveRecordHistoryBehavior extends Behavior
         }
     }
 
-    private function saveHistoryModel($type, $field_name=null, $old_value=null, $new_value=null)
+    private function saveHistoryModel($type, $field_name = null, $old_value = null, $new_value = null)
     {
         $history = new ActiveRecordHistory();
         $history->type = $type;
         $history->field_name = $field_name;
-        $history->old_value = $old_value;
-        $history->new_value = $new_value;
+        $history->old_value = $this->formatValueWithRules($field_name, $old_value);
+        $history->new_value = $this->formatValueWithRules($field_name, $new_value);
 
         $history->model = get_class($this->object);
         $history->model_id = $this->object->getPrimaryKey();
 
         $history->save();
+    }
+
+    private function formatValueWithRules($field_name, $value)
+    {
+        if( !key_exists($field_name, $this->propertyValueFormatters) ){
+            return $value;
+        }
+        return $this->propertyValueFormatters[$field_name]($this->object, $value);
     }
 
 

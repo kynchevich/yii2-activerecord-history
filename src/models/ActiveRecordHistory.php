@@ -30,6 +30,12 @@ class ActiveRecordHistory extends \yii\db\ActiveRecord
     const TYPE_UPDATE = 2;
     const TYPE_DELETE = 3;
 
+    const NAMES_OF_TYPES = [
+        self::TYPE_INSERT => 'Insert',
+        self::TYPE_UPDATE => 'Update',
+        self::TYPE_DELETE => 'Delete'
+    ];
+
     public function behaviors()
     {
         return [
@@ -48,25 +54,45 @@ class ActiveRecordHistory extends \yii\db\ActiveRecord
     public function fields()
     {
         return array_merge(parent::fields(),[
+            'user' => function() {
+                return $this->user;
+            },
             'field_full_name' => function() {
                 return $this->model::instance()->getAttributeLabel($this->field_name);
             },
             'type_full_name' => function() {
-                switch ($this->type){
-                    case ActiveRecordHistory::TYPE_INSERT:
-                        return 'Создание';
-                        break;
-                    case ActiveRecordHistory::TYPE_UPDATE:
-                        return 'Редактирование';
-                        break;
-                    case ActiveRecordHistory::TYPE_DELETE:
-                        return 'Удаление';
-                        break;
+                if( !isset(self::NAMES_OF_TYPES[$this->type]) ){
+                    return '';
                 }
-                return '';
+                $name = self::NAMES_OF_TYPES[$this->type];
+                try{
+                    $name = \Yii::t('ARHistory', $name);
+                } catch (\Exception $e){ }
+
+                return $name;
+            },
+            'model_full_name' => function() {
+                $name = $this->model;
+                try{
+                    $name = \Yii::t('ARHistory', 'model.' . $name);
+                } catch (\Exception $e){ }
+
+                return $name;
             }
         ]);
     }
 
+
+
+
+    /**
+     * Gets query for [[User]].
+     *
+     * @return \yii\db\ActiveQuery
+     */
+    public function getUser()
+    {
+        return $this->hasOne(\Yii::$app->user->identityClass, ['id' => 'user_id']);
+    }
 
 }
