@@ -76,7 +76,9 @@ class ActiveRecordHistoryBehavior extends Behavior
     public function getChangesHistory($sortAsc = true, $relations = [])
     {
         $query = ActiveRecordHistory::find()
-            ->orderBy(['id' => ($sortAsc ? SORT_ASC : SORT_DESC)]);
+            ->orderBy(['id' => ($sortAsc ? SORT_ASC : SORT_DESC)])
+            ->andWhere(['model' => get_class($this->owner)])
+            ->andWhere(['model_id' => $this->owner->getPrimaryKey()]);
 
         if (!$relations) {
             return $query->all();
