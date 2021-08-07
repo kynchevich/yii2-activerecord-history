@@ -4,6 +4,7 @@ namespace kirillemko\activeRecordHistory;
 
 
 use kirillemko\activeRecordHistory\models\ActiveRecordHistory;
+use yii\data\Pagination;
 use yii\db\ActiveRecord;
 use \yii\base\Behavior;
 
@@ -43,6 +44,12 @@ class ActiveRecordHistoryBehavior extends Behavior
      */
     public $watchDeleteEvent = true;
 
+
+    /**
+     * @var bool if paginate
+     */
+    public $paginate = true;
+
     /**
      * @var array format property values function to save
      */
@@ -73,7 +80,7 @@ class ActiveRecordHistoryBehavior extends Behavior
     }
 
 
-    public function getChangesHistory($sortAsc = true, $relations = [])
+    public function getChangesHistory($sortAsc = true, $relations = [], Pagination $paginator=null)
     {
         $query = ActiveRecordHistory::find()
             ->orderBy(['id' => ($sortAsc ? SORT_ASC : SORT_DESC)])
@@ -99,6 +106,13 @@ class ActiveRecordHistoryBehavior extends Behavior
         $relatedObjectsData = $this->getObjectRelatedRecordData($modelWithRelations, $relationNames);
         foreach ($relatedObjectsData as $relatedObjectsDatum) {
             $query->orWhere(['AND', $relatedObjectsDatum]);
+        }
+
+        if( $paginator ){
+            $paginator->totalCount = $query->count();
+            return  $query->offset($paginator->offset)
+                ->limit($paginator->limit)
+                ->all();
         }
 
         return $query->all();
