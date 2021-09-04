@@ -18,7 +18,7 @@ class m210710_081213_activerecordhistory_init extends Migration
             'old_value' => $this->text(),
             'new_value' => $this->text(),
             'created_at' => $this->integer()->notNull(),
-        ], 'ENGINE=InnoDB');
+        ]);
 
         $this->createIndex('idx-modelhistory-model_id', self::TABLE_NAME, ['model', 'model_id']);
         $this->createIndex('idx-modelhistory-type', self::TABLE_NAME, ['type']);
