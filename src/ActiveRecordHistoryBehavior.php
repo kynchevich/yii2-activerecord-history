@@ -236,7 +236,7 @@ class ActiveRecordHistoryBehavior extends Behavior
         }
     }
 
-    private function saveHistoryModel($event, $field_name = null, $old_value = null, $new_value = null)
+    public function saveHistoryModel($event, $field_name = null, $old_value = null, $new_value = null)
     {
         $history = new ActiveRecordHistory();
         $history->event = $event;
