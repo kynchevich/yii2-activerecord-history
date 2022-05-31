@@ -10,7 +10,7 @@ use yii\behaviors\TimestampBehavior;
 /**
  * @property $id
  * @property $user_id
- * @property $type
+ * @property $event
  * @property $model
  * @property $model_id
  * @property $field_name
@@ -25,16 +25,6 @@ class ActiveRecordHistory extends \yii\db\ActiveRecord
         return 'activerecord_models_history';
     }
 
-
-    const TYPE_INSERT = 1;
-    const TYPE_UPDATE = 2;
-    const TYPE_DELETE = 3;
-
-    const NAMES_OF_TYPES = [
-        self::TYPE_INSERT => 'Insert',
-        self::TYPE_UPDATE => 'Update',
-        self::TYPE_DELETE => 'Delete'
-    ];
 
     public function behaviors()
     {
@@ -58,16 +48,10 @@ class ActiveRecordHistory extends \yii\db\ActiveRecord
                 return $this->user;
             },
             'field_full_name' => function() {
-                if (class_exists($this->model)){
-                    return $this->model::instance()->getAttributeLabel($this->field_name);
-                }
-                return null;
+                return $this->model::instance()->getAttributeLabel($this->field_name);
             },
             'type_full_name' => function() {
-                if( !isset(self::NAMES_OF_TYPES[$this->type]) ){
-                    return '';
-                }
-                $name = self::NAMES_OF_TYPES[$this->type];
+                $name = $this->event;
                 try{
                     $name = \Yii::t('ARHistory', $name);
                 } catch (\Exception $e){ }

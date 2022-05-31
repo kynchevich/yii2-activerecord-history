@@ -44,6 +44,23 @@ class ActiveRecordHistoryBehavior extends Behavior
      */
     public $watchDeleteEvent = true;
 
+    /**
+     * You can add custom events. For example afterRestore event of softDelete behaviour
+     *
+     * ```php
+     *     'customEvents' => [
+     *          'afterRestore' => [
+     *              'oldValueProperty' => null,
+     *              'newValueProperty' => 'question',
+     *          ]
+     *          ...
+     *      ]
+     * ```
+     *
+     * @var array
+     */
+    public $customEvents = [];
+
 
     /**
      * @var bool if paginate
@@ -63,6 +80,7 @@ class ActiveRecordHistoryBehavior extends Behavior
     private $object = null;
 
 
+
     public function events()
     {
         $events = [];
@@ -74,6 +92,10 @@ class ActiveRecordHistoryBehavior extends Behavior
         }
         if ($this->watchDeleteEvent) {
             $events[ActiveRecord::EVENT_AFTER_DELETE] = 'saveHistory';
+        }
+
+        foreach ($this->customEvents as $customEventName => $customEventConfig) {
+            $events[$customEventName] = 'saveHistory';
         }
 
         return $events;
@@ -153,48 +175,71 @@ class ActiveRecordHistoryBehavior extends Behavior
         switch ($event->name) {
             case ActiveRecord::EVENT_AFTER_INSERT:
                 $this->saveHistoryModel(
-                    ActiveRecordHistory::TYPE_INSERT,
+                    $event->name,
                     $this->newValuePropertyOnInsert ?: null,
                     null,
                     $this->newValuePropertyOnInsert ? $this->object->{$this->newValuePropertyOnInsert} : null
                 );
 
                 if ($this->saveFieldsOnInsert) {
-                    $this->saveHistoryModelAttributes(ActiveRecordHistory::TYPE_UPDATE, $event->changedAttributes);
+                    $this->saveHistoryModelAttributes($event->name, $event->changedAttributes);
                 }
                 break;
             case ActiveRecord::EVENT_AFTER_UPDATE:
-                $this->saveHistoryModelAttributes(ActiveRecordHistory::TYPE_UPDATE, $event->changedAttributes);
+                $this->saveHistoryModelAttributes($event->name, $event->changedAttributes);
                 break;
             case ActiveRecord::EVENT_AFTER_DELETE:
-//                $this->saveHistoryModel(ActiveRecordHistory::TYPE_DELETE);
                 $this->saveHistoryModel(
-                    ActiveRecordHistory::TYPE_DELETE,
+                    $event->name,
                     $this->oldValuePropertyOnDelete ?: null,
                     $this->oldValuePropertyOnDelete ? $this->object->{$this->oldValuePropertyOnDelete} : null,
                     null
                 );
                 break;
             default:
-                throw new \Exception('Not found event!');
+                if( !$this->processCustomEvents($event->name) ){
+                    throw new \Exception('Not found event!');
+                }
+
         }
     }
 
-    private function saveHistoryModelAttributes($type, $changedAttributes = [])
+    private function processCustomEvents($eventName): bool
+    {
+        foreach ($this->customEvents as $customEventName => $customEventConfig) {
+            if( $customEventName !== $eventName ){
+                continue;
+            }
+            $fieldName = $customEventConfig['oldValueProperty'] ?? null;
+            if( !$fieldName ){
+                $fieldName = $customEventConfig['newValueProperty'] ?? null;
+            }
+            $this->saveHistoryModel(
+                $eventName,
+                $fieldName,
+                $this->object->{$customEventConfig['oldValueProperty']} ?? null,
+                $this->object->{$customEventConfig['newValueProperty']} ?? null
+            );
+            return true;
+        }
+        return false;
+    }
+
+    private function saveHistoryModelAttributes($event, $changedAttributes = [])
     {
         foreach ($changedAttributes as $changedAttributeName => $oldValue) {
             if (in_array($changedAttributeName, $this->ignoreFields)) {
                 continue;
             }
             $newValue = $this->object->$changedAttributeName;
-            $this->saveHistoryModel($type, $changedAttributeName, $oldValue, $newValue);
+            $this->saveHistoryModel($event, $changedAttributeName, $oldValue, $newValue);
         }
     }
 
-    private function saveHistoryModel($type, $field_name = null, $old_value = null, $new_value = null)
+    private function saveHistoryModel($event, $field_name = null, $old_value = null, $new_value = null)
     {
         $history = new ActiveRecordHistory();
-        $history->type = $type;
+        $history->event = $event;
         $history->field_name = $field_name;
         $history->old_value = $this->formatValueWithRules($field_name, $old_value);
         $history->new_value = $this->formatValueWithRules($field_name, $new_value);
