@@ -217,8 +217,8 @@ class ActiveRecordHistoryBehavior extends Behavior
             $this->saveHistoryModel(
                 $eventName,
                 $fieldName,
-                $this->object->{$customEventConfig['oldValueProperty']} ?? null,
-                $this->object->{$customEventConfig['newValueProperty']} ?? null
+                $this->object->{$customEventConfig['oldValueProperty'] ?? null} ?? null,
+                $this->object->{$customEventConfig['newValueProperty'] ?? null} ?? null
             );
             return true;
         }
