@@ -32,6 +32,7 @@ class ActiveRecordHistory extends \yii\db\ActiveRecord
             [
                 'class' => TimestampBehavior::class,
                 'updatedAtAttribute' => false,
+                'value' => null,
             ],
             [
                 'class' => BlameableBehavior::class,
