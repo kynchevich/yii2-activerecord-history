@@ -102,7 +102,7 @@ class ActiveRecordHistoryBehavior extends Behavior
     }
 
 
-    public function getChangesHistory($sortAsc = true, $relations = [], Pagination $paginator=null)
+    public function getChangesHistory($sortAsc = true, $relations = [], Pagination $paginator=null, $directRelations=[])
     {
         $query = ActiveRecordHistory::find()
             ->orderBy(['id' => ($sortAsc ? SORT_ASC : SORT_DESC)])
@@ -121,14 +121,27 @@ class ActiveRecordHistoryBehavior extends Behavior
 
         // Фильтр только по тем релейшенам, которые запрашивались в истории
         $relationNames = [];
-        foreach ($relations as $relation) {
-            $relationNames = array_merge($relationNames, explode('.', $relation));
+        foreach ($relations as $relationKey => $relationValue) {
+            $relationName = is_numeric($relationKey) ? $relationValue : $relationKey;
+            $relationNames = array_merge($relationNames, explode('.', $relationName));
         }
 
         $relatedObjectsData = $this->getObjectRelatedRecordData($modelWithRelations, $relationNames);
         foreach ($relatedObjectsData as $relatedObjectsDatum) {
             $query->orWhere(['AND', $relatedObjectsDatum]);
         }
+
+
+        // При использовании with() у нас может быть ситуация, когда у нас динамический релейшен
+        // и нам нужно для каждого объекта отдельно запросить этот релейшен. Иначе он не будет найдет
+        // Для этого мы убираем наш релейшен из with и собираем его отдельно
+        foreach ($directRelations as $directRelation) {
+            $data = $this->getObjectDirectRecordData($modelWithRelations, $directRelation);
+            foreach ($data as $directDatum) {
+                $query->orWhere(['AND', $directDatum]);
+            }
+        }
+
 
         if( $paginator ){
             $paginator->totalCount = $query->count();
@@ -140,8 +153,46 @@ class ActiveRecordHistoryBehavior extends Behavior
         return $query->all();
     }
 
-    private function getObjectRelatedRecordData(ActiveRecord $object, $filter=[])
+    private function getObjectDirectRecordData($initialObject, $relation)
     {
+        $relationChain = explode('.',$relation);
+        $objects = $this->getFinalObjectsInDirectRelation([$initialObject], $relationChain);
+
+        $data = [];
+        foreach ($objects as $object) {
+            $data[] = [
+                'model' => get_class($object),
+                'model_id' => $object->getPrimaryKey()
+            ];
+        }
+        return $data;
+    }
+
+    private function getFinalObjectsInDirectRelation($objects, $relationsChain)
+    {
+        $relationToTake = array_shift($relationsChain);
+        $newObjects = [];
+        foreach ($objects as $object) {
+            $relatedObjects = $object->$relationToTake;
+            if( is_array($relatedObjects) ){
+                $newObjects = array_merge($newObjects, $object->$relationToTake);
+            } else {
+                $newObjects[] = $relatedObjects;
+            }
+        }
+        if( count($relationsChain) ){
+            $newObjects = $this->getFinalObjectsInDirectRelation($newObjects, $relationsChain);
+        }
+
+        return $newObjects;
+    }
+
+
+    private function getObjectRelatedRecordData(?ActiveRecord $object, $filter=[])
+    {
+        if( !$object ){
+            return [];
+        }
         $data = [[
             'model' => get_class($object),
             'model_id' => $object->getPrimaryKey()
