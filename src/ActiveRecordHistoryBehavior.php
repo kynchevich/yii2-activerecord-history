@@ -176,7 +176,7 @@ class ActiveRecordHistoryBehavior extends Behavior
             $relatedObjects = $object->$relationToTake;
             if( is_array($relatedObjects) ){
                 $newObjects = array_merge($newObjects, $object->$relationToTake);
-            } else {
+            } elseif( $relatedObjects ) {
                 $newObjects[] = $relatedObjects;
             }
         }
