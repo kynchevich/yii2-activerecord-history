@@ -109,7 +109,7 @@ class ActiveRecordHistoryBehavior extends Behavior
             ->andWhere(['model' => get_class($this->owner)])
             ->andWhere(['model_id' => $this->owner->getPrimaryKey()]);
 
-        if (!$relations) {
+        if (!$relations && !$directRelations) {
             return $query->all();
         }
 
