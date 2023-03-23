@@ -49,7 +49,9 @@ class ActiveRecordHistory extends \yii\db\ActiveRecord
                 return $this->user;
             },
             'field_full_name' => function() {
-                return $this->model::instance()->getAttributeLabel($this->field_name);
+                return $this->field_name
+                    ? $this->model::instance()->getAttributeLabel($this->field_name)
+                    : null;
             },
             'type_full_name' => function() {
                 $name = $this->event;
