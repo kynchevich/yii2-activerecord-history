@@ -42,7 +42,7 @@ class ActiveRecordHistoryAdder
 
     public function setNewValue($newValue): self
     {
-        $this->historyElement->old_value = $newValue;
+        $this->historyElement->new_value = $newValue;
         return $this;
     }
 
